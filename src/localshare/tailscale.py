@@ -97,10 +97,3 @@ class Tailscale:
     def backend_state(self) -> str | None:
         state = self.status().get("BackendState")
         return state if isinstance(state, str) else None
-
-
-Tailscale.which = Tailscale.which
-Tailscale.dns_name = Tailscale.dns_name
-Tailscale.backend_state = Tailscale.backend_state
-Tailscale.serve_status = Tailscale.serve_status
-Tailscale.funnel_status = Tailscale.funnel_status

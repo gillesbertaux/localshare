@@ -5,5 +5,5 @@ target:
   port: 3000
 reach: tailnet
 allow:
-  public: false
   lan: false
+  public: false

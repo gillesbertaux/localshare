@@ -6,8 +6,8 @@ target:
   port: 8787
 reach: tailnet
 allow:
-  public: true
   lan: false
+  public: true
 security:
   exclusive: true
   stop_on_exit: true

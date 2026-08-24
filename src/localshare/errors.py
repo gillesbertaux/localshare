@@ -24,7 +24,3 @@ class TailscaleError(LocalshareError):
     """tailscale CLI failed."""
 
     exit_code = EXIT_TAILSCALE
-
-
-ConfigError = ConfigError
-EXIT_PRECONDITION = EXIT_PRECONDITION

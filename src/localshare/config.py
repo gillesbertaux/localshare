@@ -51,6 +51,7 @@ class TailscaleOpts:
 @dataclass
 class LanOpts:
     hostname: str | None = None
+    port: int | None = None
 
 
 @dataclass
@@ -221,6 +222,11 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
     hostname = lan_raw.get("hostname")
     if hostname is not None and not isinstance(hostname, str):
         raise ConfigError("lan.hostname must be a string")
+    if hostname is not None and not NAME_RE.fullmatch(hostname):
+        raise ConfigError("lan.hostname must be a DNS label (it becomes <host>.local)")
+    lan_port = _opt_int(lan_raw.get("port"), "lan.port")
+    if lan_port is not None and not 1 <= lan_port <= 65535:
+        raise ConfigError("lan.port must be between 1 and 65535")
 
     sec_raw = _require_mapping(data.get("security"), "security")
     security = Security(
@@ -236,7 +242,7 @@ def parse_config(data: dict[str, Any], path: Path) -> Config:
         reach=reach,
         allow=allow,
         tailscale=ts,
-        lan=LanOpts(hostname=hostname),
+        lan=LanOpts(hostname=hostname, port=lan_port),
         security=security,
         path=path,
         raw=data,

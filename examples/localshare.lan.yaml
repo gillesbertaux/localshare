@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=../schemas/localshare.schema.json
+# Phone testing over Wi-Fi: http://storefront.local reaches 127.0.0.1:5173.
+schema: 1
+name: storefront
+target:
+  port: 5173
+reach: lan
+allow:
+  lan: true
+  public: false
+lan:
+  hostname: storefront

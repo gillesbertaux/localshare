@@ -1,7 +1,7 @@
 [project]
 name = "localshare"
-version = "1.0.0"
-description = "Project-local wrapper around Tailscale Serve and Funnel."
+version = "1.1.0"
+description = "Share a local project as <name>.local on your LAN, on your tailnet, or publicly."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

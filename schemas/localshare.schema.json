@@ -84,7 +84,14 @@
       "properties": {
         "hostname": {
           "type": "string",
-          "description": "Bonjour hostname without .local. Reserved for a later version."
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$",
+          "description": "Bonjour hostname without .local. Defaults to name."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Preferred LAN listen port. Default 80, falls back to 7777."
         }
       }
     },
@@ -95,7 +102,7 @@
         "exclusive": {
           "type": "boolean",
           "default": true,
-          "description": "Reset existing Serve/Funnel on this machine before up."
+          "description": "Reset existing Serve/Funnel on this machine before up. LAN reach is host-routed and always multi-project."
         },
         "stop_on_exit": { "type": "boolean", "default": true },
         "confirm_public": {

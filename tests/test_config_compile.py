@@ -83,19 +83,64 @@ def test_public_disallowed(tmp_path: Path) -> None:
         compile_up(cfg(tmp_path, MINIMAL), "public")
 
 
-def test_lan_not_v1(tmp_path: Path) -> None:
+def test_lan_plan(tmp_path: Path) -> None:
     config = cfg(
         tmp_path,
         """
 schema: 1
-name: x
+name: storefront
 target:
-  port: 1
+  port: 5173
 allow:
   lan: true
 """,
     )
-    with pytest.raises(PreconditionError, match="not implemented"):
+    plan = compile_up(config, "lan")
+    assert plan.backend == "lan"
+    assert plan.binary_argv == []
+    assert plan.lan_hostname == "storefront"
+    assert plan.lan_target_port == 5173
+    assert plan.reset_first is False
+
+
+def test_lan_hostname_override(tmp_path: Path) -> None:
+    config = cfg(
+        tmp_path,
+        """
+schema: 1
+name: storefront
+target:
+  port: 5173
+allow:
+  lan: true
+lan:
+  hostname: shop
+  port: 8080
+""",
+    )
+    plan = compile_up(config, "lan")
+    assert plan.lan_hostname == "shop"
+    assert plan.lan_preferred_port == 8080
+
+
+def test_lan_disallowed(tmp_path: Path) -> None:
+    with pytest.raises(PreconditionError, match="allow.lan"):
+        compile_up(cfg(tmp_path, MINIMAL), "lan")
+
+
+def test_lan_requires_port_target(tmp_path: Path) -> None:
+    config = cfg(
+        tmp_path,
+        """
+schema: 1
+name: api
+target:
+  url: https+insecure://127.0.0.1:8443
+allow:
+  lan: true
+""",
+    )
+    with pytest.raises(PreconditionError, match="target.port"):
         compile_up(config, "lan")
 
 
