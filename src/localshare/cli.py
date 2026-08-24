@@ -14,12 +14,11 @@ from typing import Any, TextIO
 import yaml
 
 from localshare import __version__, state
-from localshare.compile import BACKEND_LAN, Plan, compile_up, public_url
+from localshare.compile import LanPlan, compile_up, public_url
 from localshare.config import Config, find_project_root, load_config, parse_config
-from localshare.daemon import DaemonController, run_daemon
+from localshare.daemon import DaemonController, DaemonInfo, run_daemon
 from localshare.errors import (
     EXIT_OK,
-    EXIT_USAGE,
     ConfigError,
     LocalshareError,
     PreconditionError,
@@ -50,7 +49,17 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--json",
         action="store_true",
-        help="machine-readable output on status, url, doctor, validate",
+        help="machine-readable output on status, url, validate, doctor, daemon",
+    )
+
+    # Accept `validate --json` as well as `--json validate`. SUPPRESS keeps the
+    # subcommand's default from overwriting a --json given before the subcommand.
+    json_flag = argparse.ArgumentParser(add_help=False)
+    json_flag.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="machine-readable output",
     )
 
     sub = parser.add_subparsers(dest="command", required=True)
@@ -79,21 +88,29 @@ def _parser() -> argparse.ArgumentParser:
         "--tailscale", action="store_true", help="only reset Serve/Funnel"
     )
 
-    status = sub.add_parser("status", help="show config + live state")
+    status = sub.add_parser(
+        "status", parents=[json_flag], help="show config + live state"
+    )
     status.add_argument(
         "--no-tailscale",
         action="store_true",
         help="skip Tailscale queries (LAN-only machines)",
     )
 
-    url = sub.add_parser("url", help="print the live URL")
+    url = sub.add_parser("url", parents=[json_flag], help="print the live URL")
     url_scope = url.add_mutually_exclusive_group()
     url_scope.add_argument("--lan", action="store_true", help="print the .local URL")
     url_scope.add_argument("--tailnet", action="store_true", help="print the tailnet URL")
     url_scope.add_argument("--public", action="store_true", help="print the funnel URL")
 
-    sub.add_parser("validate", help="validate localshare.yaml and exit")
-    sub.add_parser("doctor", help="check Tailscale, mDNS, daemon, config discovery")
+    sub.add_parser(
+        "validate", parents=[json_flag], help="validate localshare.yaml and exit"
+    )
+    sub.add_parser(
+        "doctor",
+        parents=[json_flag],
+        help="check Tailscale, mDNS, daemon, config discovery",
+    )
 
     init = sub.add_parser("init", help="write a localshare.yaml in the current directory")
     init.add_argument("--name", required=True, help="DNS-label project name")
@@ -110,7 +127,9 @@ def _parser() -> argparse.ArgumentParser:
         help="set allow.lan: true so `up --lan` is permitted",
     )
 
-    daemon = sub.add_parser("daemon", help="inspect or stop the LAN daemon")
+    daemon = sub.add_parser(
+        "daemon", parents=[json_flag], help="inspect or stop the LAN daemon"
+    )
     daemon.add_argument("--stop", action="store_true", help="stop the daemon")
 
     internal = sub.add_parser("_daemon", help=argparse.SUPPRESS)
@@ -120,11 +139,12 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _reach_override(args: argparse.Namespace) -> str | None:
-    if getattr(args, "public", False):
+    """`up` and `url` both take the same mutually exclusive reach flags."""
+    if args.public:
         return "public"
-    if getattr(args, "lan", False):
+    if args.lan:
         return "lan"
-    if getattr(args, "tailnet", False):
+    if args.tailnet:
         return "tailnet"
     return None
 
@@ -149,7 +169,6 @@ def _config_payload(config: Config) -> dict[str, Any]:
         "lan": {"hostname": config.lan.hostname or config.name, "port": config.lan.port},
         "security": {
             "exclusive": config.security.exclusive,
-            "stop_on_exit": config.security.stop_on_exit,
             "confirm_public": config.security.confirm_public,
         },
     }
@@ -162,11 +181,8 @@ def _tailscale_url(ts: Tailscale, config: Config) -> str | None:
     return public_url(dns, config.tailscale.https_port, config.tailscale.path)
 
 
-def _live_lan_url(config: Config, daemon: DaemonController) -> str | None:
-    info = daemon.info()
-    if not info:
-        return None
-    project = (info.get("projects") or {}).get(config.name)
+def _lan_url_in(info: DaemonInfo | None, name: str) -> str | None:
+    project = ((info or {}).get("projects") or {}).get(name)
     if isinstance(project, dict) and isinstance(project.get("url"), str):
         return project["url"]
     return None
@@ -255,9 +271,31 @@ def _cmd_doctor(
     return EXIT_OK
 
 
+def _claim_name(config: Config, plan: LanPlan) -> None:
+    """Refuse to hijack a `.local` name another project is already serving."""
+    owner = str(config.path)
+    for entry in state.read_lan_entries().values():
+        if entry.config_path == owner:
+            continue
+        if entry.name == config.name or entry.hostname == plan.hostname:
+            raise PreconditionError(
+                f"{plan.hostname}.local is already served for {entry.config_path}; "
+                "rename this project or run `localshare down --lan` there first"
+            )
+    state.put_lan_entry(
+        state.LanEntry(
+            name=config.name,
+            hostname=plan.hostname,
+            port=plan.target_port,
+            config_path=owner,
+            updated_at=time.time(),
+        )
+    )
+
+
 def _up_lan(
     config: Config,
-    plan: Plan,
+    plan: LanPlan,
     daemon: DaemonController,
     preferred_port: int | None,
     stdout: TextIO,
@@ -266,22 +304,13 @@ def _up_lan(
         raise PreconditionError(
             "no mDNS publisher available (need dns-sd on macOS or avahi-publish)"
         )
-    assert plan.lan_hostname is not None and plan.lan_target_port is not None
-    state.put_lan_entry(
-        state.LanEntry(
-            name=config.name,
-            hostname=plan.lan_hostname,
-            port=plan.lan_target_port,
-            config_path=str(config.path),
-            updated_at=time.time(),
-        )
-    )
-    info = daemon.ensure(preferred_port or plan.lan_preferred_port)
+    _claim_name(config, plan)
+    info = daemon.ensure(preferred_port or plan.preferred_port)
     port = int(info.get("port", 80))
-    url = _live_lan_url(config, daemon) or lan_url(plan.lan_hostname, port)
+    url = _lan_url_in(info, config.name) or lan_url(plan.hostname, port)
     stdout.write(f"name    {config.name}\n")
     stdout.write("reach   lan\n")
-    stdout.write(f"target  http://127.0.0.1:{plan.lan_target_port}\n")
+    stdout.write(f"target  http://127.0.0.1:{plan.target_port}\n")
     stdout.write(f"url     {url}\n")
     if info.get("ip"):
         stdout.write(f"ip      {info['ip']}\n")
@@ -302,7 +331,7 @@ def _cmd_up(
     stdout: TextIO,
 ) -> int:
     plan = compile_up(config, _reach_override(args))
-    if plan.backend == BACKEND_LAN:
+    if isinstance(plan, LanPlan):
         return _up_lan(config, plan, daemon, args.lan_port, stdout)
 
     if plan.reach == "public" and config.security.confirm_public and not args.yes:
@@ -313,12 +342,12 @@ def _cmd_up(
     if plan.reset_first:
         ts.reset_serve()
         ts.reset_funnel()
-    ts.apply(plan.binary_argv)
+    ts.run(plan.argv)
     url = _tailscale_url(ts, config)
     stdout.write(f"name    {config.name}\n")
     stdout.write(f"reach   {plan.reach}\n")
     stdout.write(f"persist {str(plan.persist).lower()}\n")
-    stdout.write(f"cmd     tailscale {' '.join(plan.binary_argv)}\n")
+    stdout.write(f"cmd     tailscale {' '.join(plan.argv)}\n")
     if url:
         stdout.write(f"url     {url}\n")
     if plan.reach == "public":
@@ -335,19 +364,16 @@ def _cmd_down(
     daemon: DaemonController,
     stdout: TextIO,
 ) -> int:
-    only_lan = bool(args.lan)
-    only_tailscale = bool(args.tailscale)
-    do_lan = only_lan or not only_tailscale
-    do_tailscale = only_tailscale or not only_lan
+    do_lan = args.lan or not args.tailscale
+    do_tailscale = args.tailscale or not args.lan
 
     if do_lan:
         existed, remaining = state.drop_lan_entry(config.name)
         if existed:
             stdout.write(f"lan     removed {config.name}.local\n")
-        if not remaining:
-            if daemon.stop():
-                stdout.write("lan     daemon stopped\n")
-        elif existed:
+        if not remaining and daemon.stop():
+            stdout.write("lan     daemon stopped\n")
+        elif remaining and existed:
             daemon.refresh()
 
     if do_tailscale:
@@ -374,7 +400,7 @@ def _cmd_status(
         "lan": {
             "registered": lan_entry is not None,
             "daemon": info,
-            "url": _live_lan_url(config, daemon),
+            "url": _lan_url_in(info, config.name),
         },
         "tailscale": None,
     }
@@ -424,7 +450,7 @@ def _cmd_url(
 ) -> int:
     reach = _reach_override(args) or config.reach
     if reach == "lan":
-        url = _live_lan_url(config, daemon)
+        url = _lan_url_in(daemon.info(), config.name)
         if not url:
             raise PreconditionError(
                 f"{config.name} is not on the LAN; run `localshare up --lan`"
@@ -509,7 +535,6 @@ def main(
         if args.command == "url":
             return _cmd_url(args, config, ts, daemon, as_json, stdout)
         parser.error(f"unknown command {args.command}")
-        return EXIT_USAGE
     except LocalshareError as exc:
         if as_json and args.command in JSON_COMMANDS:
             _emit_json({"ok": False, "error": str(exc)}, stdout)

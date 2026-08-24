@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 
 import pytest
@@ -55,14 +57,34 @@ def test_corrupt_registry_is_ignored() -> None:
     assert state.read_lan_entries() == {}
 
 
+def test_registry_from_a_future_version_is_ignored() -> None:
+    state.ensure_state_dir()
+    state.registry_path().write_text(
+        json.dumps(
+            {
+                "version": state.REGISTRY_VERSION + 1,
+                "lan": [{"name": "venue", "hostname": "venue", "port": 3000}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert state.read_lan_entries() == {}
+
+
+def test_entry_missing_required_field_is_skipped() -> None:
+    state.put_lan_entry(_entry("venue", 3000))
+    raw = json.loads(state.registry_path().read_text(encoding="utf-8"))
+    raw["lan"].append({"hostname": "broken"})
+    state.registry_path().write_text(json.dumps(raw), encoding="utf-8")
+    assert list(state.read_lan_entries()) == ["venue"]
+
+
 def test_daemon_info_requires_live_pid() -> None:
     state.write_daemon_info({"pid": 999_999_999, "port": 80})
     assert state.read_daemon_info() is None
 
 
 def test_daemon_info_with_own_pid() -> None:
-    import os
-
     state.write_daemon_info({"pid": os.getpid(), "port": 7777})
     info = state.read_daemon_info()
     assert info is not None

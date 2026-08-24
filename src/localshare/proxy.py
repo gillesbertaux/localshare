@@ -20,23 +20,21 @@ CHUNK = 65536
 
 RouteProvider = Callable[[], Mapping[str, int]]
 
-_REFUSED = (
-    b"HTTP/1.1 404 Not Found\r\n"
-    b"Content-Type: text/plain; charset=utf-8\r\n"
-    b"Content-Length: 10\r\n"
-    b"Connection: close\r\n"
-    b"\r\n"
-    b"Not Found\n"
-)
 
-_NO_BACKEND = (
-    b"HTTP/1.1 502 Bad Gateway\r\n"
-    b"Content-Type: text/plain; charset=utf-8\r\n"
-    b"Content-Length: 30\r\n"
-    b"Connection: close\r\n"
-    b"\r\n"
-    b"No local server on that port.\n"
-)
+def _response(status: str, body: str) -> bytes:
+    payload = body.encode()
+    return (
+        f"HTTP/1.1 {status}\r\n"
+        "Content-Type: text/plain; charset=utf-8\r\n"
+        f"Content-Length: {len(payload)}\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+    ).encode() + payload
+
+
+# Deliberately says nothing about which names are registered.
+_REFUSED = _response("404 Not Found", "Not Found\n")
+_NO_BACKEND = _response("502 Bad Gateway", "No local server on that port.\n")
 
 
 def host_header(raw: bytes) -> str | None:

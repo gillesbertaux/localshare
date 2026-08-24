@@ -10,5 +10,4 @@ allow:
   public: true
 security:
   exclusive: true
-  stop_on_exit: true
   confirm_public: true

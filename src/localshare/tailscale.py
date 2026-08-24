@@ -26,6 +26,7 @@ class Tailscale:
     ) -> None:
         self.binary = binary or default_binary()
         self._runner = runner or subprocess.run
+        self._status: dict[str, Any] | None = None
 
     def which(self) -> str | None:
         if os.path.sep in self.binary:
@@ -39,7 +40,7 @@ class Tailscale:
                 "and ensure `tailscale` is on PATH"
             )
 
-    def run(self, args: Sequence[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+    def run(self, args: Sequence[str]) -> subprocess.CompletedProcess[str]:
         argv = [self.binary, *args]
         try:
             completed = self._runner(
@@ -50,7 +51,7 @@ class Tailscale:
             )
         except OSError as exc:
             raise TailscaleError(f"failed to execute {self.binary}: {exc}") from exc
-        if check and completed.returncode != 0:
+        if completed.returncode != 0:
             detail = (completed.stderr or completed.stdout or "").strip()
             raise TailscaleError(
                 f"`{' '.join(argv)}` failed ({completed.returncode})"
@@ -59,8 +60,7 @@ class Tailscale:
         return completed
 
     def json_cmd(self, args: Sequence[str]) -> Any:
-        completed = self.run(args, check=True)
-        stdout = completed.stdout.strip()
+        stdout = self.run(args).stdout.strip()
         if not stdout:
             return {}
         try:
@@ -69,8 +69,11 @@ class Tailscale:
             raise TailscaleError(f"non-JSON from `{' '.join(args)}`: {exc}") from exc
 
     def status(self) -> dict[str, Any]:
-        data = self.json_cmd(["status", "--json"])
-        return data if isinstance(data, dict) else {}
+        """Cached: one CLI invocation is one snapshot of the tailnet."""
+        if self._status is None:
+            data = self.json_cmd(["status", "--json"])
+            self._status = data if isinstance(data, dict) else {}
+        return self._status
 
     def serve_status(self) -> Any:
         return self.json_cmd(["serve", "status", "--json"])
@@ -83,9 +86,6 @@ class Tailscale:
 
     def reset_funnel(self) -> None:
         self.run(["funnel", "reset"])
-
-    def apply(self, argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
-        return self.run(argv)
 
     def dns_name(self) -> str | None:
         self_status = self.status().get("Self") or {}

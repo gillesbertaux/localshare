@@ -205,6 +205,34 @@ def test_up_lan_registers_and_prints_local_url(tmp_path: Path) -> None:
     assert runner.calls == []
 
 
+def test_up_lan_is_idempotent(tmp_path: Path) -> None:
+    _write_config(tmp_path, lan=True)
+    daemon = FakeDaemon()
+    _run(tmp_path, ["up", "--lan"], daemon=daemon)
+    code, out, _, _, _ = _run(tmp_path, ["up", "--lan"], daemon=daemon)
+    assert code == EXIT_OK
+    assert "http://venue.local/" in out
+    assert list(state.read_lan_entries()) == ["venue"]
+
+
+def test_up_lan_refuses_to_hijack_another_project(tmp_path: Path) -> None:
+    _write_config(tmp_path, lan=True)
+    state.put_lan_entry(
+        state.LanEntry(
+            name="venue",
+            hostname="venue",
+            port=9999,
+            config_path="/elsewhere/localshare.yaml",
+            updated_at=1.0,
+        )
+    )
+    code, _, err, _, daemon = _run(tmp_path, ["up", "--lan"])
+    assert code == EXIT_PRECONDITION
+    assert "/elsewhere/localshare.yaml" in err
+    assert state.read_lan_entries()["venue"].port == 9999
+    assert daemon.ensure_calls == []
+
+
 def test_up_lan_requires_allow(tmp_path: Path) -> None:
     _write_config(tmp_path)
     code, _, err, _, daemon = _run(tmp_path, ["up", "--lan"])
@@ -252,6 +280,22 @@ def test_url_json_tailnet(tmp_path: Path) -> None:
     code, out, _, _, _ = _run(tmp_path, ["--json", "url"])
     assert code == EXIT_OK
     assert json.loads(out)["url"] == "https://mac.example.ts.net/"
+
+
+@pytest.mark.parametrize("argv", [["--json", "validate"], ["validate", "--json"]])
+def test_json_flag_accepted_on_either_side(tmp_path: Path, argv: list[str]) -> None:
+    _write_config(tmp_path)
+    code, out, _, _, _ = _run(tmp_path, argv)
+    assert code == EXIT_OK
+    assert json.loads(out)["ok"] is True
+
+
+def test_json_error_payload(tmp_path: Path) -> None:
+    code, out, _, _, _ = _run(tmp_path, ["validate", "--json"])
+    assert code == EXIT_USAGE
+    payload = json.loads(out)
+    assert payload["ok"] is False
+    assert "not localshare-capable" in payload["error"]
 
 
 def test_down_clears_both(tmp_path: Path) -> None:
@@ -307,6 +351,13 @@ def test_status_shows_both_rungs(tmp_path: Path) -> None:
     assert payload["tailscale"]["dns_name"] == "mac.example.ts.net."
 
 
+def test_status_queries_tailscale_status_once(tmp_path: Path) -> None:
+    _write_config(tmp_path)
+    code, _, _, runner, _ = _run(tmp_path, ["--json", "status"])
+    assert code == EXIT_OK
+    assert [call[1:] for call in runner.calls].count(["status", "--json"]) == 1
+
+
 def test_status_lan_off_by_default(tmp_path: Path) -> None:
     _write_config(tmp_path, lan=True)
     code, out, _, _, _ = _run(tmp_path, ["status"])
@@ -329,8 +380,10 @@ def test_daemon_subcommand(tmp_path: Path) -> None:
     code, out, _, _, _ = _run(tmp_path, ["daemon"], daemon=daemon)
     assert code == EXIT_OK
     assert "venue -> http://venue.local/" in out
-    code, out, _, _, daemon = _run(tmp_path, ["daemon", "--stop"], daemon=daemon)
+    code, out, _, _, _ = _run(tmp_path, ["daemon", "--stop"], daemon=daemon)
+    assert code == EXIT_OK
     assert "daemon stopped" in out
+    assert daemon.stop_calls == 1
 
 
 def test_discovery_walks_up(tmp_path: Path) -> None:

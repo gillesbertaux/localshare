@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +57,6 @@ class LanOpts:
 @dataclass
 class Security:
     exclusive: bool = True
-    stop_on_exit: bool = True
     confirm_public: bool = True
 
 
@@ -72,7 +71,6 @@ class Config:
     lan: LanOpts
     security: Security
     path: Path
-    raw: dict[str, Any] = field(default_factory=dict)
 
 
 def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
@@ -131,7 +129,7 @@ def load_raw(root: Path) -> tuple[Path, dict[str, Any]]:
     return config_path, data
 
 
-def _require_mapping(value: Any, field_name: str) -> dict[str, Any]:
+def _mapping(value: Any, field_name: str) -> dict[str, Any]:
     if value is None:
         return {}
     if not isinstance(value, dict):
@@ -155,97 +153,115 @@ def _opt_int(value: Any, field_name: str) -> int | None:
     return value
 
 
-def parse_config(data: dict[str, Any], path: Path) -> Config:
-    schema = data.get("schema", SCHEMA_VERSION)
-    if schema != SCHEMA_VERSION:
-        raise ConfigError(f"unsupported schema {schema}; expected {SCHEMA_VERSION}")
+def _opt_port(value: Any, field_name: str) -> int | None:
+    port = _opt_int(value, field_name)
+    if port is not None and not 1 <= port <= 65535:
+        raise ConfigError(f"{field_name} must be between 1 and 65535")
+    return port
 
-    name = data.get("name")
-    if not isinstance(name, str) or not NAME_RE.fullmatch(name):
+
+def _opt_dns_label(value: Any, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not NAME_RE.fullmatch(value):
         raise ConfigError(
-            "name must be a DNS label: lowercase letters, digits, hyphens "
-            "(1–63 chars, not starting or ending with a hyphen)"
+            f"{field_name} must be a DNS label: lowercase letters, digits, "
+            "hyphens (1–63 chars, not starting or ending with a hyphen)"
         )
+    return value
 
-    target_raw = _require_mapping(data.get("target"), "target")
-    port = _opt_int(target_raw.get("port"), "target.port")
-    url = target_raw.get("url")
+
+def _parse_reach(value: Any) -> str:
+    # YAML 1.1 parses a bare `off` as the boolean False, and `reach: off` is
+    # the documented way to keep a project shareable but not shared.
+    if value is False:
+        return "off"
+    if value not in REACH_VALUES:
+        raise ConfigError(f"reach must be one of {sorted(REACH_VALUES)}")
+    return value
+
+
+def _parse_target(raw: dict[str, Any]) -> Target:
+    port = _opt_port(raw.get("port"), "target.port")
+    url = raw.get("url")
     if url is not None and not isinstance(url, str):
         raise ConfigError("target.url must be a string")
     if (port is None) == (not url):
         raise ConfigError("set exactly one of target.port or target.url")
-    if port is not None and not 1 <= port <= 65535:
-        raise ConfigError("target.port must be between 1 and 65535")
+    return Target(port=port, url=url)
 
-    reach = data.get("reach", "tailnet")
-    if reach not in REACH_VALUES:
-        raise ConfigError(f"reach must be one of {sorted(REACH_VALUES)}")
 
-    allow_raw = _require_mapping(data.get("allow"), "allow")
+def _parse_allow(raw: dict[str, Any], reach: str) -> Allow:
     allow = Allow(
-        public=bool(allow_raw.get("public", False)),
-        lan=bool(allow_raw.get("lan", False)),
+        public=bool(raw.get("public", False)),
+        lan=bool(raw.get("lan", False)),
     )
     if reach == "public" and not allow.public:
         raise ConfigError("reach: public requires allow.public: true")
     if reach == "lan" and not allow.lan:
         raise ConfigError("reach: lan requires allow.lan: true")
+    return allow
 
-    ts_raw = _require_mapping(data.get("tailscale"), "tailscale")
-    https_port = ts_raw.get("https_port", 443)
-    if isinstance(https_port, bool) or not isinstance(https_port, int):
-        raise ConfigError("tailscale.https_port must be an integer")
-    path_value = ts_raw.get("path", "/")
-    if not isinstance(path_value, str) or not path_value.startswith("/"):
-        raise ConfigError("tailscale.path must start with /")
-    persist = _opt_bool(ts_raw.get("persist"), "tailscale.persist")
-    proxy_protocol = _opt_int(ts_raw.get("proxy_protocol"), "tailscale.proxy_protocol")
-    if proxy_protocol is not None and proxy_protocol not in (1, 2):
-        raise ConfigError("tailscale.proxy_protocol must be 1 or 2")
-    service = ts_raw.get("service")
-    if service is not None and not isinstance(service, str):
-        raise ConfigError("tailscale.service must be a string")
 
-    ts = TailscaleOpts(
-        https_port=https_port,
-        path=path_value,
-        persist=persist,
-        proxy_protocol=proxy_protocol,
-        service=service,
-    )
-    if reach == "public" and ts.https_port not in FUNNEL_HTTPS_PORTS:
+def _parse_tailscale(raw: dict[str, Any], reach: str) -> TailscaleOpts:
+    https_port = _opt_port(raw.get("https_port"), "tailscale.https_port") or 443
+    if reach == "public" and https_port not in FUNNEL_HTTPS_PORTS:
         raise ConfigError(
             f"Funnel https_port must be one of {sorted(FUNNEL_HTTPS_PORTS)}"
         )
-
-    lan_raw = _require_mapping(data.get("lan"), "lan")
-    hostname = lan_raw.get("hostname")
-    if hostname is not None and not isinstance(hostname, str):
-        raise ConfigError("lan.hostname must be a string")
-    if hostname is not None and not NAME_RE.fullmatch(hostname):
-        raise ConfigError("lan.hostname must be a DNS label (it becomes <host>.local)")
-    lan_port = _opt_int(lan_raw.get("port"), "lan.port")
-    if lan_port is not None and not 1 <= lan_port <= 65535:
-        raise ConfigError("lan.port must be between 1 and 65535")
-
-    sec_raw = _require_mapping(data.get("security"), "security")
-    security = Security(
-        exclusive=bool(sec_raw.get("exclusive", True)),
-        stop_on_exit=bool(sec_raw.get("stop_on_exit", True)),
-        confirm_public=bool(sec_raw.get("confirm_public", True)),
+    path = raw.get("path", "/")
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise ConfigError("tailscale.path must start with /")
+    proxy_protocol = _opt_int(raw.get("proxy_protocol"), "tailscale.proxy_protocol")
+    if proxy_protocol is not None and proxy_protocol not in (1, 2):
+        raise ConfigError("tailscale.proxy_protocol must be 1 or 2")
+    service = raw.get("service")
+    if service is not None and not isinstance(service, str):
+        raise ConfigError("tailscale.service must be a string")
+    return TailscaleOpts(
+        https_port=https_port,
+        path=path,
+        persist=_opt_bool(raw.get("persist"), "tailscale.persist"),
+        proxy_protocol=proxy_protocol,
+        service=service,
     )
+
+
+def _parse_lan(raw: dict[str, Any]) -> LanOpts:
+    return LanOpts(
+        hostname=_opt_dns_label(raw.get("hostname"), "lan.hostname"),
+        port=_opt_port(raw.get("port"), "lan.port"),
+    )
+
+
+def _parse_security(raw: dict[str, Any]) -> Security:
+    return Security(
+        exclusive=bool(raw.get("exclusive", True)),
+        confirm_public=bool(raw.get("confirm_public", True)),
+    )
+
+
+def parse_config(data: dict[str, Any], path: Path) -> Config:
+    schema = data.get("schema", SCHEMA_VERSION)
+    if schema != SCHEMA_VERSION:
+        raise ConfigError(f"unsupported schema {schema}; expected {SCHEMA_VERSION}")
+
+    name = _opt_dns_label(data.get("name"), "name")
+    if name is None:
+        raise ConfigError("name is required")
+
+    reach = _parse_reach(data.get("reach", "tailnet"))
 
     return Config(
         schema=schema,
         name=name,
-        target=Target(port=port, url=url),
+        target=_parse_target(_mapping(data.get("target"), "target")),
         reach=reach,
-        allow=allow,
-        tailscale=ts,
-        lan=LanOpts(hostname=hostname, port=lan_port),
-        security=security,
+        allow=_parse_allow(_mapping(data.get("allow"), "allow"), reach),
+        tailscale=_parse_tailscale(_mapping(data.get("tailscale"), "tailscale"), reach),
+        lan=_parse_lan(_mapping(data.get("lan"), "lan")),
+        security=_parse_security(_mapping(data.get("security"), "security")),
         path=path,
-        raw=data,
     )
 
 

@@ -15,7 +15,7 @@ class ConfigError(LocalshareError):
 
 
 class PreconditionError(LocalshareError):
-    """Missing binary, disallowed reach, or unimplemented mode."""
+    """Missing binary, disallowed reach, or a name already in use."""
 
     exit_code = EXIT_PRECONDITION
 

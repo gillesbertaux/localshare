@@ -42,7 +42,7 @@ localshare down
 | `localshare daemon [--stop]` | Inspect or stop the LAN daemon |
 | `localshare doctor` | PATH, mDNS, LAN IP, backend, discovery |
 
-`--json` works on `status`, `url`, `doctor`, `validate`. Discovery walks parent directories from cwd (or `-C`).
+`--json` works on `status`, `url`, `validate`, `doctor` and `daemon`, on either side of the subcommand. Discovery walks parent directories from cwd (or `-C`).
 
 ## How LAN reach works
 

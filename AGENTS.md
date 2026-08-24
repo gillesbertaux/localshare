@@ -38,9 +38,10 @@ Never run `tailscale funnel` / `tailscale serve` directly unless debugging the w
 4. Tailscale compile output stays a thin argv translation of the current Tailscale CLI (`serve`/`funnel`, `--bg`, `--yes`, `--https=`, `--set-path=`, `--proxy-protocol`).
 5. The LAN proxy parses only the first `Host` header per connection, then pipes bytes. Do not add header rewriting, TLS termination, logging of request contents, or buffering.
 6. An unknown `Host` gets a bare 404. Never enumerate registered projects to an unknown caller.
-7. The daemon is derived state. The CLI only edits the registry; the daemon reconciles. Exiting the daemon must remove every mDNS advertisement.
-8. Missing `localshare.yaml` ⇒ not capable. Do not invent a tunnel.
-9. Python 3.11+, stdlib + PyYAML. Do not add a web UI, another cloud provider, or a service discovery mechanism beyond mDNS.
+7. One project per `.local` name. `up --lan` refuses a name another config path already serves rather than silently rerouting it.
+8. The daemon is derived state. The CLI only edits the registry; the daemon reconciles. Exiting the daemon must remove every mDNS advertisement.
+9. Missing `localshare.yaml` ⇒ not capable. Do not invent a tunnel.
+10. Python 3.11+, stdlib + PyYAML. Do not add a web UI, another cloud provider, or a service discovery mechanism beyond mDNS.
 
 ## Layout
 

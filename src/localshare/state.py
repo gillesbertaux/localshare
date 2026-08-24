@@ -13,10 +13,11 @@ import os
 import signal
 import sys
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 REGISTRY_VERSION = 1
 
@@ -60,6 +61,8 @@ def ensure_state_dir() -> Path:
 
 @dataclass
 class LanEntry:
+    """One project's claim on a `<name>.local` name."""
+
     name: str
     hostname: str
     port: int
@@ -97,7 +100,9 @@ def _read_unlocked() -> dict[str, LanEntry]:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
-    entries = raw.get("lan") if isinstance(raw, dict) else None
+    if not isinstance(raw, dict) or raw.get("version") != REGISTRY_VERSION:
+        return {}
+    entries = raw.get("lan")
     if not isinstance(entries, list):
         return {}
     out: dict[str, LanEntry] = {}

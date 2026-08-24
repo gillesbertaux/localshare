@@ -13,6 +13,8 @@ from dataclasses import dataclass
 
 from localshare.netinfo import mdns_host
 
+MAX_STARTS = 5
+
 
 @dataclass(frozen=True)
 class Publisher:
@@ -56,15 +58,22 @@ class Advertisement:
         self.hostname = hostname
         self.ip = ip
         self.port = port
+        self.starts = 0
         self._process: subprocess.Popen[bytes] | None = None
 
     @property
     def alive(self) -> bool:
         return self._process is not None and self._process.poll() is None
 
+    @property
+    def exhausted(self) -> bool:
+        """A responder that keeps dying will not start working on retry 20."""
+        return self.starts >= MAX_STARTS
+
     def start(self) -> None:
-        if self.alive:
+        if self.alive or self.exhausted:
             return
+        self.starts += 1
         self._process = subprocess.Popen(
             self.publisher.argv(self.hostname, self.ip, self.port),
             stdin=subprocess.DEVNULL,

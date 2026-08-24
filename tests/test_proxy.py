@@ -73,6 +73,24 @@ def test_unknown_host_reveals_nothing(proxy) -> None:
     response = _get(proxy.port, "secret.local")
     assert b"404 Not Found" in response
     assert b"venue" not in response
+    assert b"Content-Length: 10\r\n" in response
+
+
+def test_dead_backend_returns_502() -> None:
+    closed = socket.socket()
+    closed.bind(("127.0.0.1", 0))
+    dead_port = closed.getsockname()[1]
+    closed.close()
+
+    server = bind_proxy(lambda: {"venue": dead_port}, [0], bind_host="127.0.0.1")
+    server.serve_in_thread()
+    try:
+        response = _get(server.port, "venue.local")
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert b"502 Bad Gateway" in response
+    assert b"Content-Length: 30\r\n" in response
 
 
 def test_passes_request_bytes_untouched(proxy, backend) -> None:

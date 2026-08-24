@@ -104,7 +104,6 @@
           "default": true,
           "description": "Reset existing Serve/Funnel on this machine before up. LAN reach is host-routed and always multi-project."
         },
-        "stop_on_exit": { "type": "boolean", "default": true },
         "confirm_public": {
           "type": "boolean",
           "default": true,
