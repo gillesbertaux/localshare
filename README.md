@@ -3,13 +3,15 @@
   <img src="brand/png/logo-lockup-480.png" alt="localshare" width="240" height="64">
 </picture>
 
-Share a local dev server as `app.local` on your Wi-Fi, on your tailnet, or on the internet. One config file picks which.
+Share a local dev server under a name you choose: call the project `app` and it answers on `app.local` for anyone on your Wi-Fi. One config file switches that same project to your tailnet or the public internet.
 
 | Reach | URL | Who can reach it | Backend |
 |---|---|---|---|
-| `lan` | `http://app.local/` | anyone on the same Wi-Fi | local proxy + Bonjour/mDNS |
+| `lan` | `http://<name>.local/` | anyone on the same Wi-Fi | local proxy + Bonjour/mDNS |
 | `tailnet` | `https://<machine>.<tailnet>.ts.net/` | your devices only | `tailscale serve` |
 | `public` | `https://<machine>.<tailnet>.ts.net/` | the internet | `tailscale funnel` |
+
+`<name>` is yours: any lowercase DNS label, so `app`, `api`, `checkout-v2`. It only shapes the `.local` address, because the two Tailscale reaches serve from your machine's own name.
 
 A repo is shareable once it has a `localshare.yaml`. Nothing is exposed until you run `localshare up`.
 
@@ -56,22 +58,22 @@ localshare down
 | `localshare daemon [--stop]` | Inspect or stop the LAN daemon |
 | `localshare doctor` | PATH, mDNS, LAN IP, backend, discovery |
 
-Every command looks for `localshare.yaml` in the current directory and its parents, or in `-C <dir>`. `status`, `url`, `validate`, `doctor` and `daemon` take `--json`, before or after the subcommand.
+Every command looks for `localshare.yaml` in the current directory and its parents. To start somewhere else, put `-C <dir>` before the subcommand. `status`, `url`, `validate`, `doctor` and `daemon` accept `--json`, before or after the subcommand.
 
 ## Config
 
 ```yaml
 schema: 1
-name: app
+name: app           # your choice -> app.local
 target:
   port: 3000
 reach: lan          # lan | tailnet | public | off
 allow:
   lan: true
   public: false
-lan:
-  hostname: app     # -> app.local
 ```
+
+That is the whole minimal file. `name` doubles as the `.local` hostname, so add `lan.hostname` only when you want the address to differ from the project name.
 
 Full reference: [`examples/`](examples), [`schemas/localshare.schema.json`](schemas/localshare.schema.json).
 
