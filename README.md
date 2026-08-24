@@ -87,3 +87,9 @@ Full reference: [`examples/`](examples), [`schemas/localshare.schema.json`](sche
 ```bash
 pytest
 ```
+
+Contributions are welcome. [`AGENTS.md`](AGENTS.md) is the contract for this repo — it records the invariants (what the proxy may parse, which reach needs which gate) that a change should not quietly break, and applies to humans and coding agents alike.
+
+## License
+
+[MIT](LICENSE) © Gilles Bertaux
