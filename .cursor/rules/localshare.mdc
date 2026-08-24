@@ -1,0 +1,12 @@
+---
+description: localshare v1 invariants — Tailscale Serve/Funnel wrapper, YAML intent file, tailnet-first
+alwaysApply: true
+---
+
+Follow `AGENTS.md` in this repo.
+
+- `localshare.yaml` is the shareability flag and the source of intent.
+- Default reach is Tailscale Serve (tailnet). Funnel requires `allow.public: true` and `localshare up --public --yes`.
+- Do not implement LAN/mDNS or Tailscale Services in v1.
+- Do not call `tailscale serve` / `funnel` except through this CLI (or tests with a fake runner).
+- Keep the compile step a thin argv translation. No extra data plane.

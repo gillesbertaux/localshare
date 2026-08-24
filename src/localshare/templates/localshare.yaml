@@ -1,0 +1,32 @@
+# Project intent for localshare. Presence of this file means the repo is shareable.
+schema: 1
+
+name: {{NAME}}
+
+target:
+  port: {{PORT}}
+
+# Desired state for `localshare up` with no flags.
+# tailnet = Tailscale Serve (devices on your tailnet only)
+# public  = Tailscale Funnel (internet) — also requires allow.public and --yes
+# lan     = reserved (not in v1)
+# off     = file present, nothing exposed until a flag is passed
+reach: tailnet
+
+allow:
+  public: false
+  lan: false
+
+tailscale:
+  https_port: 443
+  path: /
+  # persist: omit → true for tailnet, false for public
+  # service: reserved for later (Tailscale Services)
+
+# lan:
+#   hostname: {{NAME}}
+
+security:
+  exclusive: true
+  stop_on_exit: true
+  confirm_public: true

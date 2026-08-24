@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=../schemas/localshare.schema.json
+# Webhook receiver: tailnet by default, Funnel allowed with --public --yes.
+schema: 1
+name: stripe-hooks
+target:
+  port: 8787
+reach: tailnet
+allow:
+  public: true
+  lan: false
+security:
+  exclusive: true
+  stop_on_exit: true
+  confirm_public: true

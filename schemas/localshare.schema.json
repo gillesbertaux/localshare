@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gillesbertaux/localshare/schemas/localshare.schema.json",
+  "title": "localshare.yaml",
+  "description": "Project intent file for localshare. Presence of this file means the repo is localshare-capable.",
+  "type": "object",
+  "required": ["name", "target"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "type": "integer",
+      "const": 1,
+      "default": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$",
+      "description": "DNS-label project name (not the live MagicDNS hostname)."
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Tailscale target URL, e.g. http://127.0.0.1:3000 or https+insecure://127.0.0.1:8443"
+        }
+      },
+      "oneOf": [
+        { "required": ["port"] },
+        { "required": ["url"] }
+      ]
+    },
+    "reach": {
+      "type": "string",
+      "enum": ["tailnet", "public", "lan", "off"],
+      "default": "tailnet"
+    },
+    "allow": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "public": { "type": "boolean", "default": false },
+        "lan": { "type": "boolean", "default": false }
+      }
+    },
+    "tailscale": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "https_port": {
+          "type": "integer",
+          "default": 443,
+          "description": "Serve: any port. Funnel: 443, 8443, or 10000."
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "default": "/"
+        },
+        "persist": {
+          "type": "boolean",
+          "description": "Maps to tailscale --bg. Default true for tailnet, false for public."
+        },
+        "proxy_protocol": {
+          "type": "integer",
+          "enum": [1, 2]
+        },
+        "service": {
+          "type": "string",
+          "description": "Reserved. Tailscale Services are not wired in v1."
+        }
+      }
+    },
+    "lan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hostname": {
+          "type": "string",
+          "description": "Bonjour hostname without .local. Reserved for a later version."
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exclusive": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reset existing Serve/Funnel on this machine before up."
+        },
+        "stop_on_exit": { "type": "boolean", "default": true },
+        "confirm_public": {
+          "type": "boolean",
+          "default": true,
+          "description": "Require `localshare up --public --yes`."
+        }
+      }
+    }
+  }
+}
