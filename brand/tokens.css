@@ -1,0 +1,31 @@
+/* localshare brand tokens. See BRAND.md for usage rules. */
+
+:root {
+  --ls-ink: #10162f;
+  --ls-ink-muted: #5d6588;
+  --ls-paper: #ffffff;
+  --ls-paper-dim: #f4f6ff;
+
+  /* One colour per reach. Never reassign these. */
+  --ls-reach-lan: #12b886;
+  --ls-reach-tailnet: #5b7cfa;
+  --ls-reach-public: #f59f0a;
+  --ls-reach-off: rgb(16 22 47 / 16%);
+
+  --ls-radius-badge: 0.234375em; /* 15/64 of the icon box */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ls-ink: #f4f6ff;
+    --ls-ink-muted: #9aa3c4;
+    --ls-paper: #0b0f1f;
+    --ls-paper-dim: #10162f;
+
+    /* Lifted for contrast on ink. Hues are unchanged. */
+    --ls-reach-lan: #2ad8a4;
+    --ls-reach-tailnet: #8098ff;
+    --ls-reach-public: #ffb733;
+    --ls-reach-off: rgb(244 246 255 / 20%);
+  }
+}

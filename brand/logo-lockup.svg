@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="64" viewBox="0 0 240 64" fill="none" role="img" aria-label="localshare">
+  <g stroke-width="5" stroke-linecap="round">
+    <path d="M5.5 32A26.5 26.5 0 1 1 32 58.5" stroke="#F59F0A"/>
+    <path d="M13 32A19 19 0 1 1 32 51" stroke="#5B7CFA"/>
+    <path d="M20.5 32A11.5 11.5 0 1 1 32 43.5" stroke="#12B886"/>
+    <circle cx="32" cy="32" r="5" fill="#10162F" stroke="none"/>
+  </g>
+  <text x="78" y="43" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="34" font-weight="650" letter-spacing="-0.8">
+    <tspan fill="#10162F">local</tspan><tspan fill="#5D6588">share</tspan>
+  </text>
+</svg>

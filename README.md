@@ -1,4 +1,7 @@
-# localshare
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/png/logo-lockup-dark-480.png">
+  <img src="brand/png/logo-lockup-480.png" alt="localshare" width="240" height="64">
+</picture>
 
 One config file, three reaches for a local dev server:
 
@@ -89,6 +92,10 @@ pytest
 ```
 
 Contributions are welcome. [`AGENTS.md`](AGENTS.md) is the contract for this repo — it records the invariants (what the proxy may parse, which reach needs which gate) that a change should not quietly break, and applies to humans and coding agents alike.
+
+## Brand
+
+Logo, reach-state icons, colour tokens and usage rules: [`brand/`](brand/BRAND.md). The three arcs of the mark are the three reaches, ordered by distance, and the palette assigns one colour to each — reuse them if you build a client so `lan`, `tailnet` and `public` look the same everywhere.
 
 ## License
 
