@@ -45,6 +45,7 @@ Discovery starts at cwd (or `-C DIR`) and walks parents.
 
 ## Failures
 
+- `localshare: command not found` → `pipx install git+https://github.com/gillesbertaux/localshare` (or `uv tool install` with the same URL). Keep the `git+` prefix; the bare PyPI name is an unrelated project.
 - `allow.lan: false` / `allow.public: false` → set the cap in YAML, do not bypass.
 - `no mDNS publisher` → macOS has `dns-sd` built in; on Linux install `avahi-utils`.
 - LAN URL shows `:7777` → port 80 was unavailable. That is fine; the URL just carries the port.

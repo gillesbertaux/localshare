@@ -31,7 +31,7 @@ Name: lowercase DNS label (`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`). It becomes
 
 Set `target.port` to the dev server's real port (LAN reach requires a port, not a `target.url`).
 
-If the CLI is not installed, copy `src/localshare/templates/localshare.yaml` from this repo, substitute `{{NAME}}` and `{{PORT}}`, then `localshare validate`.
+If the CLI is missing, install it with `pipx install git+https://github.com/gillesbertaux/localshare` (keep the `git+` prefix; the bare PyPI name is an unrelated project). Without it, write the file by hand from the schema and skip validation.
 
 ## Git
 

@@ -3,7 +3,7 @@
   <img src="brand/png/logo-lockup-480.png" alt="localshare" width="240" height="64">
 </picture>
 
-One config file, three reaches for a local dev server:
+Share a local dev server as `app.local` on your Wi-Fi, on your tailnet, or on the internet. One config file picks which.
 
 | Reach | URL | Who can reach it | Backend |
 |---|---|---|---|
@@ -11,18 +11,29 @@ One config file, three reaches for a local dev server:
 | `tailnet` | `https://<machine>.<tailnet>.ts.net/` | your devices only | `tailscale serve` |
 | `public` | `https://<machine>.<tailnet>.ts.net/` | the internet | `tailscale funnel` |
 
-Presence of `localshare.yaml` is the flag that a repo is shareable. The file is intent, not state.
+A repo is shareable once it has a `localshare.yaml`. Nothing is exposed until you run `localshare up`.
 
 ## Install
 
-Python 3.11+. LAN reach needs `dns-sd` (built into macOS) or `avahi-publish`. Tailnet and public reach need the Tailscale CLI, logged in.
+localshare is not on PyPI yet, so install it from git:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+pipx install git+https://github.com/gillesbertaux/localshare
+# or
+uv tool install git+https://github.com/gillesbertaux/localshare
+```
+
+Either one puts `localshare` on your PATH in its own isolated environment, so there is no venv to activate. Then check your machine:
+
+```bash
 localshare doctor
 ```
+
+If the command is not found, run `pipx ensurepath` and open a new shell.
+
+You need Python 3.11+. `.local` names need `dns-sd` (built into macOS) or `avahi-publish` (Linux). Tailnet and public reach need the Tailscale CLI, logged in. `doctor` tells you which of those are missing.
+
+Two gotchas with a git install. Keep the `git+` prefix: plain `pipx install localshare` fetches an unrelated 2015 package that happens to own the name on PyPI. And a git install tracks `main`, so an upgrade can change the code while the version still reads `1.1.0`.
 
 ## Use
 
@@ -37,7 +48,7 @@ localshare down
 | Command | What it does |
 |---|---|
 | `localshare init --name app --port 3000` | Write `localshare.yaml` |
-| `localshare validate` | Schema/semantic check |
+| `localshare validate` | Schema and semantic check |
 | `localshare up [--lan\|--tailnet\|--public --yes]` | Expose it |
 | `localshare down [--lan\|--tailscale]` | Stop sharing |
 | `localshare status` | Config plus live LAN and Tailscale state |
@@ -45,18 +56,7 @@ localshare down
 | `localshare daemon [--stop]` | Inspect or stop the LAN daemon |
 | `localshare doctor` | PATH, mDNS, LAN IP, backend, discovery |
 
-`--json` works on `status`, `url`, `validate`, `doctor` and `daemon`, on either side of the subcommand. Discovery walks parent directories from cwd (or `-C`).
-
-## How LAN reach works
-
-`up --lan` writes the project into a small registry and starts one shared daemon that:
-
-1. publishes `<name>.local` → this machine's LAN IPv4 through the OS mDNS responder, and
-2. listens on port 80 (falling back to 7777) and routes by `Host` header to `127.0.0.1:<target.port>`.
-
-Because routing is by hostname, several projects share the one port at once: `app.local` and `api.local` can both be up. The proxy reads only the first `Host` header of a connection and then pipes raw bytes, so WebSockets, HMR, SSE and streaming pass through unmodified. Nothing is rewritten and no traffic leaves the network.
-
-`.local` names are Bonjour, so they resolve on macOS and iOS out of the box, on Android 12+ and on Linux with Avahi. The name exists only while the daemon runs; `localshare down` removes it from the network.
+Every command looks for `localshare.yaml` in the current directory and its parents, or in `-C <dir>`. `status`, `url`, `validate`, `doctor` and `daemon` take `--json`, before or after the subcommand.
 
 ## Config
 
@@ -73,29 +73,43 @@ lan:
   hostname: app     # -> app.local
 ```
 
-Full reference: [`examples/`](examples), [`schemas/localshare.schema.json`](schemas/localshare.schema.json), [`AGENTS.md`](AGENTS.md).
+Full reference: [`examples/`](examples), [`schemas/localshare.schema.json`](schemas/localshare.schema.json).
 
-`localshare.local.yaml` overlays the committed file (gitignored) for machine-local ports.
+Commit that file. To change a port on one machine only, add a gitignored `localshare.local.yaml`, which overlays it.
+
+## How LAN reach works
+
+`up --lan` adds the project to a small registry and starts one shared daemon. The daemon:
+
+1. publishes `<name>.local` pointing at this machine's LAN IPv4, through the OS mDNS responder
+2. listens on port 80, or 7777 if 80 is taken, and routes by `Host` header to `127.0.0.1:<target.port>`
+
+Because it routes by hostname, projects share that one port. `app.local` and `api.local` can both be up. The proxy reads the first `Host` header of a connection and then pipes bytes, so WebSockets, HMR, SSE and streaming pass through untouched. No traffic leaves the network.
+
+`.local` names resolve out of the box on macOS and iOS, on Android 12+, and on Linux with Avahi. A name exists only while the daemon runs, and `localshare down` removes it.
 
 ## Security defaults
 
-- `reach` defaults to `tailnet`. Nothing is exposed by a file alone.
-- LAN requires `allow.lan: true`. It is unauthenticated by design, so it is a per-project opt-in and the daemon refuses any `Host` it does not know (404, no names leaked).
-- Public requires `allow.public: true` **and** `--yes`, and does not survive a reboot unless `tailscale.persist: true`.
-- `security.exclusive: true` resets existing Serve/Funnel before `up`. It does not apply to LAN, which is host-routed and multi-project.
-- Do not commit live `*.ts.net` URLs; `localshare url` derives them from MagicDNS.
+- `reach` defaults to `tailnet`. A config file on its own exposes nothing.
+- LAN needs `allow.lan: true`. It is unauthenticated by design, so it is opt-in per project. Unknown hosts get a bare 404, so the daemon never reveals what else you are serving.
+- Public needs both `allow.public: true` and `--yes`, and it does not survive a reboot unless `tailscale.persist: true`.
+- `security.exclusive: true` resets any existing Serve and Funnel before `up`, so one Tailscale share is active at a time. LAN is exempt: it is host-routed and deliberately multi-project.
+- Don't commit live `*.ts.net` URLs. `localshare url` derives them from MagicDNS when you need them.
 
 ## Development
 
 ```bash
-pytest
+git clone https://github.com/gillesbertaux/localshare
+cd localshare
+make install   # venv with an editable install and dev deps
+make test
 ```
 
-Contributions are welcome. [`AGENTS.md`](AGENTS.md) is the contract for this repo — it records the invariants (what the proxy may parse, which reach needs which gate) that a change should not quietly break, and applies to humans and coding agents alike.
+Contributions welcome. [`AGENTS.md`](AGENTS.md) is the contract for this repo: it lists the invariants a change should not quietly break, such as what the proxy is allowed to parse and which reach needs which gate. It applies to people and coding agents alike.
 
 ## Brand
 
-Logo, reach-state icons, colour tokens and usage rules: [`brand/`](brand/BRAND.md). The three arcs of the mark are the three reaches, ordered by distance, and the palette assigns one colour to each — reuse them if you build a client so `lan`, `tailnet` and `public` look the same everywhere.
+Logo, reach-state icons and colour tokens: [`brand/`](brand/BRAND.md). There is one colour per reach, so reuse them if you build a client and `lan`, `tailnet` and `public` will look the same everywhere.
 
 ## License
 
